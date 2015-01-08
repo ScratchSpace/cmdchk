@@ -1,0 +1,21 @@
+#!/bin/sh
+
+childpid=0
+
+_term() {
+    kill -TERM $childpid > /dev/null 2>&1
+    exit
+}
+
+_usr1() {
+    kill -TERM $childpid > /dev/null 2>&1
+}
+
+trap _term SIGTERM
+trap _usr1 SIGUSR1
+
+while :; do
+    /usr/bin/python /usr/local/bin/service_check_server.py >> /var/log/appsrvchk.log 2>&1 &
+    childpid=$!
+    wait $childpid
+done
