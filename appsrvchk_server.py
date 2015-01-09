@@ -1,7 +1,10 @@
-import os, pwd
+import os, pwd, signal, sys
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from multiprocessing import Process
 from subprocess import check_call, CalledProcessError
+
+from setproctitle import setproctitle
 
 class myHTTPRequestHandler(BaseHTTPRequestHandler):
 
@@ -53,7 +56,10 @@ class myHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_my_headers(status)
         self.send_my_response(status)
 
-if __name__ == '__main__':
+def run_server():
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+    setproctitle('appsrvchk_server')
     httpd = HTTPServer(('', 9200), myHTTPRequestHandler)
     if os.getuid() == 0:
         newid = pwd.getpwnam('nobody')
@@ -62,3 +68,24 @@ if __name__ == '__main__':
         os.setgid(newgid)
         os.setuid(newuid)
     httpd.serve_forever()
+
+def wrapper():
+    setproctitle('appsrvchk_wrapper')
+    server = None
+
+    def trap_TERM(signal, frame):
+        server.terminate()
+        server.join()
+        sys.exit()
+
+    def trap_USR1(signal, frame):
+        server.terminate()
+        server.join()
+
+    signal.signal(signal.SIGTERM, trap_TERM)
+    signal.signal(signal.SIGUSR1, trap_USR1)
+
+    while True:
+        server = Process(target=run_server)
+        server.start()
+        server.join()
