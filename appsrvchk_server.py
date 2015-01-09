@@ -6,7 +6,7 @@ from subprocess import check_call, CalledProcessError
 
 from setproctitle import setproctitle
 
-class myHTTPRequestHandler(BaseHTTPRequestHandler):
+class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def get_process_status(self):
         try:
@@ -60,7 +60,7 @@ def run_server():
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGUSR1, signal.SIG_DFL)
     setproctitle('appsrvchk_server')
-    httpd = HTTPServer(('', 9200), myHTTPRequestHandler)
+    httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
     if os.getuid() == 0:
         newid = pwd.getpwnam('nobody')
         newuid, newgid = newid[2:4]
@@ -75,12 +75,10 @@ def wrapper():
 
     def trap_TERM(signal, frame):
         server.terminate()
-        server.join()
         sys.exit()
 
     def trap_USR1(signal, frame):
         server.terminate()
-        server.join()
 
     signal.signal(signal.SIGTERM, trap_TERM)
     signal.signal(signal.SIGUSR1, trap_USR1)
