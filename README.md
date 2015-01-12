@@ -11,16 +11,14 @@ some signals.
 
 The server listens on port 9200 and responds to GET, HEAD and OPTIONS requests.
 If everything is good, it returns 200, otherwise 503. It logs all requests, as
-well as what caused an error, to stderr, which it inherits from the wrapper.
+well as what caused an error, to stderr, by default, or a file can be specified.
 
 ## Wrapper
 
 The wrapper starts the server and then sleeps. If the server dies for whatever
 reason, the wrapper will wake up and start a new one. It's a simple script, and
-as such, deamonizing and setting it's output FDs it is up to you. If sent a
-SIGTERM, it will kill the sever it started and then exit. If sent a SIGUSR1, it
-will kill the server it started and then start a new one. This can be useful for
-log rotation.
+as such, deamonizing it is up to you. If sent a SIGTERM, it will kill the sever
+it started and then exit.
 
 ## License
 
@@ -29,6 +27,4 @@ information.
 
 ## Compatability
 
-Requires python 2.6 or 2.7. On 2.6, using the USR1 signal may leave a zombie,
-but there should only ever be one such zombie, even if you signal it multiple
-times.
+Requires python 2.6 or 2.7, and the setproctitle package from pypi.

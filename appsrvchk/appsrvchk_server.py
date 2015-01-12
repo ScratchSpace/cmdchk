@@ -1,4 +1,4 @@
-import os, pwd, signal, sys
+import logging, logging.handlers, os, pwd, signal, sys
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from multiprocessing import Process
@@ -8,6 +8,10 @@ from setproctitle import setproctitle
 
 class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
+    def __init__(self, *args, **kwargs):
+        self.logger = logging.getLogger('appsrvchk')
+        BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+
     def get_process_status(self):
         try:
             DEVNULL = open(os.devnull, 'wb')
@@ -15,7 +19,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             check_call(['/etc/init.d/php-fpm', 'status'], stdout=DEVNULL, stderr=DEVNULL)
         except CalledProcessError as ex:
             processes = False
-            self.log_message('%s failed', (ex.cmd))
+            self.log_message('%s failed', (ex.cmd), lvl=logging.WARNING)
         else:
             processes = True
         finally:
@@ -56,10 +60,29 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_my_headers(status)
         self.send_my_response(status)
 
-def run_server():
+    def log_message(self, format, *args, **kwargs):
+        lvl = kwargs.pop('lvl', logging.INFO)
+        self.logger.log(lvl, "%s - - [%s] %s" %
+                         (self.address_string(),
+                          self.log_date_time_string(),
+                          format%args))
+
+def run_server(log_location=None):
+    setproctitle('appsrvchk_server')
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGUSR1, signal.SIG_DFL)
-    setproctitle('appsrvchk_server')
+
+    my_logger = logging.getLogger('appsrvchk')
+    my_logger.setLevel(logging.DEBUG)
+    if log_location is None:
+        handler = logging.StreamHandler()
+    else:
+        handler = logging.handlers.TimedRotatingFileHandler(
+                log_location, when='midnight', backupCount=6)
+    formatter = logging.Formatter('%(levelname)s: %(message)s')
+    handler.setFormatter(formatter)
+    my_logger.addHandler(handler)
+
     httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
     if os.getuid() == 0:
         newid = pwd.getpwnam('nobody')
@@ -77,13 +100,9 @@ def wrapper():
         server.terminate()
         sys.exit()
 
-    def trap_USR1(signal, frame):
-        server.terminate()
-
     signal.signal(signal.SIGTERM, trap_TERM)
-    signal.signal(signal.SIGUSR1, trap_USR1)
 
     while True:
-        server = Process(target=run_server)
+        server = Process(target=run_server, args=('/var/log/appsrvchk.log',))
         server.start()
         server.join()
