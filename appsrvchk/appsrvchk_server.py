@@ -62,10 +62,10 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args, **kwargs):
         lvl = kwargs.pop('lvl', logging.INFO)
-        self.logger.log(lvl, "%s - - [%s] %s" %
-                         (self.address_string(),
-                          self.log_date_time_string(),
-                          format%args))
+        self.logger.log(lvl, "%s - - [%s] %s",
+                        self.address_string(),
+                        self.log_date_time_string(),
+                        format%args)
 
 def run_server(log_location=None):
     setproctitle('appsrvchk_server')
