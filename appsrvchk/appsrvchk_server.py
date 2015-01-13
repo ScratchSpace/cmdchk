@@ -68,6 +68,15 @@ def run_server(log_location=None):
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGUSR1, signal.SIG_DFL)
 
+    httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
+
+    if os.getuid() == 0:
+        newid = pwd.getpwnam('nobody')
+        newuid, newgid = newid[2:4]
+        os.setgroups([])
+        os.setgid(newgid)
+        os.setuid(newuid)
+
     my_logger = logging.getLogger('appsrvchk')
     my_logger.setLevel(logging.DEBUG)
     if log_location is None:
@@ -79,13 +88,6 @@ def run_server(log_location=None):
     handler.setFormatter(formatter)
     my_logger.addHandler(handler)
 
-    httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
-    if os.getuid() == 0:
-        newid = pwd.getpwnam('nobody')
-        newuid, newgid = newid[2:4]
-        os.setgroups([])
-        os.setgid(newgid)
-        os.setuid(newuid)
     httpd.serve_forever()
 
 def wrapper():
@@ -99,6 +101,6 @@ def wrapper():
     signal.signal(signal.SIGTERM, trap_TERM)
 
     while True:
-        server = Process(target=run_server, args=('/var/log/appsrvchk.log',))
+        server = Process(target=run_server, args=('/var/log/appsrvchk/appsrvchk.log',))
         server.start()
         server.join()
