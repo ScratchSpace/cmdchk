@@ -18,16 +18,16 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             check_call(['/etc/init.d/nginx', 'status'], stdout=DEVNULL, stderr=DEVNULL)
             check_call(['/etc/init.d/php-fpm', 'status'], stdout=DEVNULL, stderr=DEVNULL)
         except CalledProcessError as ex:
-            processes = False
+            self.processes = False
             self.log_message('%s failed', (ex.cmd), lvl=logging.WARNING)
         else:
-            processes = True
+            self.processes = True
         finally:
             DEVNULL.close()
-        return processes
 
-    def send_my_headers(self, status):
-        if status:
+    def send_my_headers(self):
+        self.get_process_status()
+        if self.processes:
             self.send_response(200, 'OK')
             self.send_header('Content-Type', 'text/plain')
             self.send_header('Connection','close')
@@ -40,25 +40,21 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', '42')
             self.end_headers()
 
-    def send_my_response(self, status):
-        if status:
+    def send_my_response(self):
+        self.send_my_headers()
+        if self.processes:
             self.wfile.write("Both nginx and php-fpm are running.\r\n\r\n")
         else:
             self.wfile.write("One of nginx or php-fpm are not running.\r\n\r\n")
 
     def do_HEAD(self):
-        status = self.get_process_status()
-        self.send_my_headers(status)
+        self.send_my_headers()
 
     def do_OPTIONS(self):
-        status = self.get_process_status()
-        self.send_my_headers(status)
-        self.send_my_response(status)
+        self.send_my_response()
 
     def do_GET(self):
-        status = self.get_process_status()
-        self.send_my_headers(status)
-        self.send_my_response(status)
+        self.send_my_response()
 
     def log_message(self, format, *args, **kwargs):
         lvl = kwargs.pop('lvl', logging.INFO)
