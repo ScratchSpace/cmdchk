@@ -119,27 +119,42 @@ def run_server(log_location=None):
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGUSR1, signal.SIG_DFL)
 
-    error = False
-    lvl = logging.DEBUG
-
     httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
 
-    startup_messages = ['Server started.']
+    messages = {'startup': ['Server started.'],
+                'error': []}
 
+    _drop_privileges(messages)
+
+    my_logger = _setup_logging(log_location, messages)
+
+    for message in messages['startup']:
+        my_logger.debug(message)
+
+    if messages['error']:
+        for message in messages['error']:
+            my_logger.critical(message)
+        time.sleep(5)
+        sys.exit(1)
+
+    httpd.serve_forever()
+
+def _drop_privileges(messages):
     if os.getuid() == 0:
         try:
             newuser = pwd.getpwnam('nobody')
         except KeyError:
-            startup_messages.append('Could not drop privileges to nobody.')
-            error = True
-            lvl = logging.CRITICAL
+            messages['error'].append('Could not drop privileges to nobody.')
         else:
             newuid, newgid = newuser[2:4]
             os.setgroups([])
             os.setgid(newgid)
             os.setuid(newuid)
-            startup_messages.append('Privileges dropped from root to nobody.')
+            messages['startup'].append('Privileges dropped from root to nobody.')
+    else:
+        messages['startup'].append('Not root, privileges unchanged.')
 
+def _setup_logging(log_location, messages):
     my_logger = logging.getLogger('appsrvchk')
     my_logger.setLevel(logging.DEBUG)
     if log_location is None:
@@ -150,21 +165,12 @@ def run_server(log_location=None):
                 log_location, when='midnight', backupCount=6)
         except IOError:
             handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
-            startup_messages.append('Could not open logfile ' + log_location)
-            error = True
-            lvl = logging.CRITICAL
+            messages['error'].append('Could not open logfile ' + log_location)
     formatter = logging.Formatter('%(levelname)s: %(message)s')
     handler.setFormatter(formatter)
     my_logger.addHandler(handler)
+    return my_logger
 
-    for message in startup_messages:
-        my_logger.log(lvl, message)
-
-    if error:
-        time.sleep(5)
-        sys.exit(1)
-
-    httpd.serve_forever()
 
 def wrapper():
     """A simple loop to make sure there's always a serer running.
