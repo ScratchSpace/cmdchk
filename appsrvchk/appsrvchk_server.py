@@ -108,69 +108,84 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
                          self.log_date_time_string(),
                          format_string%args)
 
-def run_server(log_location=None):
-    """Set up the server details and set it running.
+class MonitoringServer(object):
+    """Holds a stdlib HTTPServer and the configuration for it.
 
-    Makes the server binds as root, then drops privileges, sets up the logger
-    and tells the server to begin serving requests. The log_location argument
-    takes a filename to log to. If it's unset, messages will be logged to
-    stderr."""
+    Only provides a run method, which can be called after the class is
+    instantiated and will run the internal HTTPServer."""
+
+    def __init__(self, log_location=None):
+        """Creates the MonitoringServer.
+
+        Sets up a number of internal variables, including the HTTPServer. Takes
+        a filename as the log_location parameter to determine where logs should
+        go."""
+        self._httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
+        self._startup_messages = ['Server started.']
+        self._error_messages = []
+        self._log_location = log_location
+        self._logger = None
+
+    def run(self):
+        """Sets up the environment and runs the internal HTTPServer."""
+        self._drop_privileges()
+        self._setup_logging()
+        for message in self._startup_messages:
+            self._logger.debug(message)
+
+        if self._error_messages:
+            for message in self._error_messages:
+                self._logger.critical(message)
+            time.sleep(5)
+            sys.exit(1)
+
+        self._httpd.serve_forever()
+
+
+    def _drop_privileges(self):
+        """If running as root, will attempt to drop privileges to nobody."""
+        if os.getuid() == 0:
+            try:
+                newuser = pwd.getpwnam('nobody')
+            except KeyError:
+                self._error_messages.append('Could not drop privileges to nobody.')
+            else:
+                newuid, newgid = newuser[2:4]
+                os.setgroups([])
+                os.setgid(newgid)
+                os.setuid(newuid)
+                self._startup_messages.append('Privileges dropped from root to nobody.')
+        else:
+            self._startup_messages.append('Not root, privileges unchanged.')
+
+    def _setup_logging(self):
+        """Creates the logger used by the rest of the program.
+
+        Logs to the console by default. If a log_location was specified, will
+        attempt to log there. If the fails, will log the error to syslog's
+        daemon facility."""
+        self._logger = logging.getLogger('appsrvchk')
+        self._logger.setLevel(logging.DEBUG)
+        if self._log_location is None:
+            handler = logging.StreamHandler()
+        else:
+            try:
+                handler = TimedRotatingFileHandler(
+                    self._log_location, when='midnight', backupCount=6)
+            except IOError:
+                handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
+                self._error_messages.append('Could not open logfile ' + self._log_location)
+        formatter = logging.Formatter('%(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
+
+def run_server(log_location=None):
+    """The entry point for running a server. Does some process bookkeeping."""
     setproctitle('appsrvchk_server')
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
-    signal.signal(signal.SIGUSR1, signal.SIG_DFL)
 
-    httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
-
-    messages = {'startup': ['Server started.'],
-                'error': []}
-
-    _drop_privileges(messages)
-
-    my_logger = _setup_logging(log_location, messages)
-
-    for message in messages['startup']:
-        my_logger.debug(message)
-
-    if messages['error']:
-        for message in messages['error']:
-            my_logger.critical(message)
-        time.sleep(5)
-        sys.exit(1)
-
-    httpd.serve_forever()
-
-def _drop_privileges(messages):
-    if os.getuid() == 0:
-        try:
-            newuser = pwd.getpwnam('nobody')
-        except KeyError:
-            messages['error'].append('Could not drop privileges to nobody.')
-        else:
-            newuid, newgid = newuser[2:4]
-            os.setgroups([])
-            os.setgid(newgid)
-            os.setuid(newuid)
-            messages['startup'].append('Privileges dropped from root to nobody.')
-    else:
-        messages['startup'].append('Not root, privileges unchanged.')
-
-def _setup_logging(log_location, messages):
-    my_logger = logging.getLogger('appsrvchk')
-    my_logger.setLevel(logging.DEBUG)
-    if log_location is None:
-        handler = logging.StreamHandler()
-    else:
-        try:
-            handler = TimedRotatingFileHandler(
-                log_location, when='midnight', backupCount=6)
-        except IOError:
-            handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
-            messages['error'].append('Could not open logfile ' + log_location)
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
-    handler.setFormatter(formatter)
-    my_logger.addHandler(handler)
-    return my_logger
-
+    server = MonitoringServer(log_location)
+    server.run()
 
 def wrapper():
     """A simple loop to make sure there's always a serer running.
@@ -182,6 +197,7 @@ def wrapper():
     server = None
 
     def trap_TERM(signal, frame):
+        """A callback trap for SIGTERM. Kills the child server and exits."""
         server.terminate()
         sys.exit()
 
