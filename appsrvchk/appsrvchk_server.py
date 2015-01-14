@@ -16,24 +16,23 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
     """A request handler that checks the status of some processes.
 
     This class subclasses BaseHTTPRequestHandler and provides do_HEAD, do_GET
-    and do_OPTIONS methods. It overrides the log_message method to do logging
-    with the logging module and extends __init__ to store a logger instance
-    variable."""
+    and do_OPTIONS methods. It overrides log_message method and extends
+    __init__."""
 
     def __init__(self, *args, **kwargs):
         """Create the MyHTTPRequestHandler.
 
-        Simply sets the 'logger' and 'processes' instance variables. Everything
+        Simply sets the '_logger' and '_processes' instance variables. Everything
         else is passed to the superclass. See BaseHTTPRequestHandler.__init__
         for details."""
-        self.logger = logging.getLogger('appsrvchk')
-        self.processes = False
+        self._logger = logging.getLogger('appsrvchk')
+        self._processes = False
         BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
     def _get_process_status(self):
         """The test to determine if the monitored processes are running.
 
-        Checks the status of programs and updates the 'processes' instance
+        Checks the status of programs and updates the '_processes' instance
         variable for later use. Is called by _send_my_headers as the first step
         in creating a response.
 
@@ -51,10 +50,10 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             check_call(['/etc/init.d/php-fpm', 'status'],
                        stdout=DEVNULL, stderr=DEVNULL)
         except CalledProcessError as ex:
-            self.processes = False
+            self._processes = False
             self.log_message('%s failed', (ex.cmd), lvl=logging.WARNING)
         else:
-            self.processes = True
+            self._processes = True
         finally:
             DEVNULL.close()
 
@@ -64,7 +63,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         Calls _get_process_status first. If processing a HEAD request, this is
         the only method that needs to be called."""
         self._get_process_status()
-        if self.processes:
+        if self._processes:
             self.send_response(200, 'OK')
             self.send_header('Content-Type', 'text/plain')
             self.send_header('Connection','close')
@@ -83,7 +82,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         Calls _send_my_headers before sending the body. Call this for a GET
         request."""
         self._send_my_headers()
-        if self.processes:
+        if self._processes:
             self.wfile.write("Both nginx and php-fpm are running.\r\n\r\n")
         else:
             self.wfile.write("One of nginx or php-fpm are not running.\r\n\r\n")
@@ -104,10 +103,10 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         """Overridden to send messages to the logger, instead of stderr."""
         # Python 3 has keyword only arguments, which lvl should use.
         lvl = kwargs.pop('lvl', logging.INFO)
-        self.logger.log(lvl, "%s - - [%s] %s",
-                        self.address_string(),
-                        self.log_date_time_string(),
-                        format_string%args)
+        self._logger.log(lvl, "%s - - [%s] %s",
+                         self.address_string(),
+                         self.log_date_time_string(),
+                         format_string%args)
 
 def run_server(log_location=None):
     """Set up the server details and set it running.
