@@ -3,9 +3,10 @@
 MyHTTPRequestHandler: A custom request handler for the stdlib HTTPServer.
 run_server: Configures and runs the HTTPServer.
 wrapper: Makes sure there's always a server running."""
-import logging, logging.handlers, os, pwd, signal, sys
+import logging, os, pwd, signal, sys, time
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
 from subprocess import check_call, CalledProcessError
 
@@ -119,25 +120,50 @@ def run_server(log_location=None):
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGUSR1, signal.SIG_DFL)
 
+    error = False
+    lvl = logging.DEBUG
+
     httpd = HTTPServer(('', 9200), MyHTTPRequestHandler)
 
+    startup_messages = ['Server started.']
+
     if os.getuid() == 0:
-        newid = pwd.getpwnam('nobody')
-        newuid, newgid = newid[2:4]
-        os.setgroups([])
-        os.setgid(newgid)
-        os.setuid(newuid)
+        try:
+            newuser = pwd.getpwnam('nobody')
+        except KeyError:
+            startup_messages.append('Could not drop privileges to nobody.')
+            error = True
+            lvl = logging.CRITICAL
+        else:
+            newuid, newgid = newuser[2:4]
+            os.setgroups([])
+            os.setgid(newgid)
+            os.setuid(newuid)
+            startup_messages.append('Privileges dropped from root to nobody.')
 
     my_logger = logging.getLogger('appsrvchk')
     my_logger.setLevel(logging.DEBUG)
     if log_location is None:
         handler = logging.StreamHandler()
     else:
-        handler = logging.handlers.TimedRotatingFileHandler(
-            log_location, when='midnight', backupCount=6)
+        try:
+            handler = TimedRotatingFileHandler(
+                log_location, when='midnight', backupCount=6)
+        except IOError:
+            handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
+            startup_messages.append('Could not open logfile ' + log_location)
+            error = True
+            lvl = logging.CRITICAL
     formatter = logging.Formatter('%(levelname)s: %(message)s')
     handler.setFormatter(formatter)
     my_logger.addHandler(handler)
+
+    for message in startup_messages:
+        my_logger.log(lvl, message)
+
+    if error:
+        time.sleep(5)
+        sys.exit(1)
 
     httpd.serve_forever()
 

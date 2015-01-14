@@ -12,6 +12,10 @@ some signals.
 The server listens on port 9200 and responds to GET, HEAD and OPTIONS requests.
 If everything is good, it returns 200, otherwise 503. It logs all requests, as
 well as what caused an error, to stderr, by default, or a file can be specified.
+If it is unable to open it's logfile, it will use syslog's daemon facility to
+log this error, then sleep for 5 seconds and exit. If started as root, it will
+attempt to drop privileges to nobody. If this fails, it will log the failure,
+sleep for 5 seconds and exit.
 
 ## Wrapper
 
