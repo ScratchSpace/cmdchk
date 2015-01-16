@@ -1,7 +1,13 @@
+import sys
+
 from setuptools import setup, find_packages
 
 with open('README.md') as readme:
     long_description = readme.read()
+
+extra_packages = []
+if sys.version_info[0] == 2 and sys.version_info[1] == 6:
+    extra_packages = ['argparse']
 
 setup(
     name='appsrvchk',
@@ -27,7 +33,7 @@ setup(
     ],
     keywords='cluster monitor appsrv http',
     packages=find_packages(),
-    install_requires=['setproctitle'],
+    install_requires=['setproctitle'].extend(extra_packages),
     platforms=['GNU/Linux'],
     entry_points={
         'console_scripts': [

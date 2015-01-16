@@ -9,13 +9,15 @@ some signals.
 
 ## Server
 
-The server listens on port 9200 and responds to GET, HEAD and OPTIONS requests.
-If everything is good, it returns 200, otherwise 503. It logs all requests, as
-well as what caused an error, to stderr, by default, or a file can be specified.
-If it is unable to open it's logfile, it will use syslog's daemon facility to
-log this error, then sleep for 5 seconds and exit. If started as root, it will
-attempt to drop privileges to nobody. If this fails, it will log the failure,
-sleep for 5 seconds and exit.
+The server listens on a specified port and responds to GET, HEAD and OPTIONS
+requests. If everything is good, it returns 200, otherwise 503. It logs all
+requests, as well as what caused an error, to a specified file. If it is unable
+to open it's logfile, it will fall back to syslog's daemon facility. If started
+as root, it will attempt to drop privileges to a specified user. Any errors
+during startup will cause it to sleep for 5 seconds and exit instead of serving.
+
+It has the capability to parse config files to set the user it runs as, the
+port it listens on and the logfile it writes to.
 
 ## Wrapper
 
@@ -23,6 +25,20 @@ The wrapper starts the server and then sleeps. If the server dies for whatever
 reason, the wrapper will wake up and start a new one. It's a simple script, and
 as such, deamonizing it is up to you. If sent a SIGTERM, it will kill the sever
 it started and then exit.
+
+## Configuration
+
+You can set the server's user, port, log file and configuration files. These can
+be set (highest to lowest priority) using arguments (try '--help'), passed to
+the constructor programatically, or specified in the configuration file (you
+cannot specify the configuration files in the configuration file).
+
+When run as just the server, the defaults are to listen on port 9200, drop
+privileges to nobody and log to the console. It will read no other configuration
+files unless told to.
+
+When run as the wrapper, it will log to /var/log/appsrvchk/appsrvchk.log and
+read /etc/appsrvchk.cfg.
 
 ## License
 
