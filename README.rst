@@ -1,13 +1,16 @@
-# Appsrvchk
+Appsrvchk
+=========
 
-## Summary
+Summary
+-------
 
 This is a program that monitors that status of important cluster services. It
 runs a small web server that you can query to find if things are good. There is
 also a wrapper which ensures that the server is running, as well as handling
 some signals.
 
-## Server
+Server
+------
 
 The server listens on a specified port and responds to GET, HEAD and OPTIONS
 requests. If everything is good, it returns 200, otherwise 503. It logs all
@@ -19,14 +22,16 @@ during startup will cause it to sleep for 5 seconds and exit instead of serving.
 It has the capability to parse config files to set the user it runs as, the
 port it listens on and the logfile it writes to.
 
-## Wrapper
+Wrapper
+-------
 
 The wrapper starts the server and then sleeps. If the server dies for whatever
 reason, the wrapper will wake up and start a new one. It's a simple script, and
 as such, deamonizing it is up to you. If sent a SIGTERM, it will kill the sever
 it started and then exit.
 
-## Configuration
+Configuration
+-------------
 
 You can set the server's user, port, log file and configuration files. These can
 be set (highest to lowest priority) using arguments (try '--help'), passed to
@@ -40,11 +45,13 @@ files unless told to.
 When run as the wrapper, it will log to /var/log/appsrvchk/appsrvchk.log and
 read /etc/appsrvchk.cfg.
 
-## License
+License
+-------
 
 University Of Illinois/NCSA Open Source License. See the LICENSE file for more
 information.
 
-## Compatability
+Compatability
+-------------
 
 Requires python 2.6 or 2.7, and the setproctitle package from pypi.

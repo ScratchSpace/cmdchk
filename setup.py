@@ -2,7 +2,7 @@ import sys
 
 from setuptools import setup, find_packages
 
-with open('README.md') as readme:
+with open('README.rst') as readme:
     long_description = readme.read()
 
 extra_packages = []

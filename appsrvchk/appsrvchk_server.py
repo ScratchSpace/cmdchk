@@ -223,9 +223,7 @@ class MonitoringServer(object):
                 self._startup_messages.append(
                     'No config files read. Using defaults.')
 
-            parameters = {'user': None,
-                          'port': int,
-                          'log_location': None}
+            parameters = dict((k, type(v)) for k, v in self._defaults.items())
 
             for name, transform in parameters.items():
                 if getattr(self, '_'+name) is None:
@@ -233,11 +231,9 @@ class MonitoringServer(object):
                     # defaulted later. For other errors, we except out of the
                     # loop.
                     try:
-                        value = config.get('appsrvchk', name)
+                        value = transform(config.get('appsrvchk', name))
                     except NoOptionError:
                         continue
-                    if transform:
-                        value = transform(value)
                     setattr(self, '_'+name, value)
 
         except (NoSectionError, ParsingError, ValueError):
