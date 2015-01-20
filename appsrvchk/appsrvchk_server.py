@@ -4,12 +4,10 @@ MyHTTPRequestHandler: A custom request handler for the stdlib HTTPServer.
 MonitoringServer: Configures and runs the HTTPServer.
 run_server: Runs the MonitoringServer.
 wrapper: Makes sure there's always a server running."""
-import logging, os, pwd, signal, sys, time
+import json, logging, os, pwd, signal, sys, time
 
 from argparse import ArgumentParser
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-from ConfigParser import (NoOptionError, NoSectionError, ParsingError,
-                          RawConfigParser)
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
 from subprocess import check_call, CalledProcessError
@@ -212,33 +210,33 @@ class MonitoringServer(object):
         methods of configuration."""
         if config_location is None:
             config_location = []
-        config = RawConfigParser()
+        config = {}
+        read_files = []
+        if isinstance(config_location, basestring):
+            config_location = [config_location]
         try:
-            files = config.read(config_location)
-            if files:
-                self._startup_messages.append(
-                    'Read config files: {0}'.format(files))
-            else:
-                config.add_section('appsrvchk')
-                self._startup_messages.append(
-                    'No config files read. Using defaults.')
-
-            parameters = dict((k, type(v)) for k, v in self._defaults.items())
-
-            for name, transform in parameters.items():
-                if getattr(self, '_'+name) is None:
-                    # If the option isn't there, we just move on, it will be
-                    # defaulted later. For other errors, we except out of the
-                    # loop.
-                    try:
-                        value = transform(config.get('appsrvchk', name))
-                    except NoOptionError:
-                        continue
-                    setattr(self, '_'+name, value)
-
-        except (NoSectionError, ParsingError, ValueError):
+            for location in config_location:
+                try:
+                    with open(location) as config_file:
+                        config.update(json.load(config_file))
+                except IOError:
+                    self._startup_messages.append(
+                        'Could not open file: ' + location)
+                else:
+                    read_files.append(location)
+            for key, value in config.items():
+                if getattr(self, '_'+key) is None:
+                    setattr(self, '_'+key, value)
+        except (AttributeError, ValueError):
             self._error_messages.append({'msg': 'Error parsing config',
                                          'exc_info': sys.exc_info()})
+        else:
+            if read_files:
+                self._startup_messages.append(
+                    'Read config files: {0}'.format(read_files))
+            else:
+                self._startup_messages.append(
+                    'No config files read. Using defaults.')
 
 def run_server(user=None, port=None, log_location=None, config_location=None,
                defaults=None):
@@ -260,7 +258,8 @@ def run_server(user=None, port=None, log_location=None, config_location=None,
         time.sleep(5)
         sys.exit(1)
 
-def wrapper():
+def wrapper(user=None, port=None, log_location=None,
+            config_location='/etc/appsrvchk.cfg', defaults=None):
     """A simple loop to make sure there's always a server running.
 
     Runs the server in a separate process and then sleeps. If the server ever
@@ -268,6 +267,13 @@ def wrapper():
     currently running server and exits. Parses exactly one command line
     argument, which is passed on as the log_location."""
     setproctitle('appsrvchk_wrapper')
+
+    if defaults is None:
+        defaults = {'log_location': '/var/log/appsrvchk/appsrvchk.log'}
+
+    parameters = dict(vars())
+    parameters.update(parse_args())
+
     server = None
 
     def trap_TERM(signum, frame):
@@ -277,12 +283,8 @@ def wrapper():
 
     signal.signal(signal.SIGTERM, trap_TERM)
 
-    args = {'config_location': '/etc/appsrvchk.cfg',
-            'defaults': {'log_location': '/var/log/appsrvchk/appsrvchk.log'}}
-    args.update(parse_args())
-
     while True:
-        server = Process(target=run_server, kwargs=args)
+        server = Process(target=run_server, kwargs=parameters)
         server.start()
         server.join()
 

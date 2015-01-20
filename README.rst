@@ -38,12 +38,17 @@ be set (highest to lowest priority) using arguments (try '--help'), passed to
 the constructor programatically, or specified in the configuration file (you
 cannot specify the configuration files in the configuration file).
 
-When run as just the server, the defaults are to listen on port 9200, drop
-privileges to nobody and log to the console. It will read no other configuration
-files unless told to.
+The configuration files are JSON formatted object, and may contain the keys
+"user" (a string), "port" (an int), and "log_location" (a string). You may
+specify multiple files to pull configuration from, which will be parsed in
+order. Setting from files parsed later will override earlier settings.
+
+When run as just the server, the default settings are to listen on port 9200,
+drop privileges to nobody and log to the console. It will read no other
+configuration files unless told to.
 
 When run as the wrapper, it will log to /var/log/appsrvchk/appsrvchk.log and
-read /etc/appsrvchk.cfg.
+read /etc/appsrvchk.cfg, otherwise acting as above.
 
 License
 -------
