@@ -4,13 +4,14 @@ MyHTTPRequestHandler: A custom request handler for the stdlib HTTPServer.
 MonitoringServer: Configures and runs the HTTPServer.
 run_server: Runs the MonitoringServer.
 wrapper: Makes sure there's always a server running."""
+from __future__ import print_function, unicode_literals
 import json, logging, os, pwd, signal, sys, time
 
 from argparse import ArgumentParser
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
-from subprocess import check_call, CalledProcessError
+from subprocess import CalledProcessError, Popen, PIPE, STDOUT
 
 from setproctitle import setproctitle
 
@@ -42,22 +43,19 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         self.log_message doesn't work, and after the superclass __init__ the
         request has already been dispatched."""
         try:
-            # Python 3 has a constant in subprocess for this, but for now we
-            # make our own.
-            DEVNULL = open(os.devnull, 'wb')
-            # Python 2.7 has check_output, which might be nice here. The output
-            # would be stored on the exception below.
-            check_call(['/etc/init.d/nginx', 'status'],
-                       stdout=DEVNULL, stderr=DEVNULL)
-            check_call(['/etc/init.d/php-fpm', 'status'],
-                       stdout=DEVNULL, stderr=DEVNULL)
+            checks = zip(self.server.check_list, self.server.return_list)
+            for check, good_ret in checks:
+                proc = Popen(check, shell=True, stdout=PIPE, stderr=STDOUT)
+                output, _ = proc.communicate()
+                ret = proc.returncode
+                if ret != good_ret:
+                    raise CalledProcessError(ret, check, output)
         except CalledProcessError as ex:
             self._processes = False
-            self.log_message('%s failed', (ex.cmd), lvl=logging.WARNING)
+            self.log_message("\n%s failed:\n%s", ex.cmd, ex.output,
+                             lvl=logging.WARNING)
         else:
             self._processes = True
-        finally:
-            DEVNULL.close()
 
     def _send_my_headers(self):
         """Handles the first part of sending a reponse.
@@ -69,13 +67,13 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200, 'OK')
             self.send_header('Content-Type', 'text/plain')
             self.send_header('Connection', 'close')
-            self.send_header('Content-Length', '37')
+            self.send_header('Content-Length', '23')
             self.end_headers()
         else:
             self.send_response(503, 'Service Unavailable')
             self.send_header('Content-Type', 'text/plain')
             self.send_header('Connection', 'close')
-            self.send_header('Content-Length', '42')
+            self.send_header('Content-Length', '31')
             self.end_headers()
 
     def _send_my_response(self):
@@ -85,9 +83,9 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         request."""
         self._send_my_headers()
         if self._processes:
-            self.wfile.write("Both nginx and php-fpm are running.\r\n\r\n")
+            self.wfile.write("All checks succeeded.\r\n\r\n")
         else:
-            self.wfile.write("One of nginx or php-fpm are not running.\r\n\r\n")
+            self.wfile.write("Check failed, please see log.\r\n\r\n")
 
     def do_HEAD(self):
         """Required by the superclass. Handles HEAD requests."""
@@ -154,6 +152,8 @@ class MonitoringServer(object):
             return False
 
         httpd = HTTPServer(('', self._settings['port']), MyHTTPRequestHandler)
+        httpd.check_list = self._settings['check_list']
+        httpd.return_list = self._settings['return_list']
         httpd.serve_forever()
 
     def _set_defaults(self):
@@ -307,6 +307,16 @@ def parse_args():
                         help='The file the server should log to.')
     parser.add_argument('--config', '-c', nargs='*', dest='config_location',
                         help='A list of config files to read from.')
+    parser.add_argument('--checks', '-k', nargs='*', dest='check_list',
+                        help='A list of commands to run.')
+    parser.add_argument('--returns', '-r', nargs='*', dest='return_list',
+                        type=int,
+                        help='A list of return codes to match the checks.')
 
-    return dict((k, v) for k, v in vars(parser.parse_args()).items()
-                if v is not None)
+    args = vars(parser.parse_args())
+    if len(args['check_list'] or []) != len(args['return_list'] or []):
+        print('Unequal number of checks and return codes', file=sys.stderr)
+        parser.print_help()
+        sys.exit()
+
+    return dict((k, v) for k, v in args.items() if v is not None)

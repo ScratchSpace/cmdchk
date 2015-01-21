@@ -13,11 +13,12 @@ Server
 ------
 
 The server listens on a specified port and responds to GET, HEAD and OPTIONS
-requests. If everything is good, it returns 200, otherwise 503. It logs all
-requests, as well as what caused an error, to a specified file. If it is unable
-to open it's logfile, it will fall back to syslog's daemon facility. If started
-as root, it will attempt to drop privileges to a specified user. Any errors
-during startup will cause it to sleep for 5 seconds and exit instead of serving.
+requests. It runs some user specified checks and if everything is good, it
+returns 200, otherwise 503. It logs all requests, as well as what caused an
+error, to a specified file. If it is unable to open it's logfile, it will fall
+back to syslog's daemon facility. If started as root, it will attempt to drop
+privileges to a specified user. Any errors during startup will cause it to sleep
+for 5 seconds and exit instead of serving.
 
 It has the capability to parse config files to set the user it runs as, the
 port it listens on and the logfile it writes to.
@@ -39,9 +40,10 @@ the constructor programatically, or specified in the configuration file (you
 cannot specify the configuration files in the configuration file).
 
 The configuration files are JSON formatted object, and may contain the keys
-"user" (a string), "port" (an int), and "log_location" (a string). You may
-specify multiple files to pull configuration from, which will be parsed in
-order. Setting from files parsed later will override earlier settings.
+"user" (a string), "port" (an int), "log_location" (a string), "check_list" (a
+list of strings) and "return_list" (a list of ints). You may specify multiple
+files to pull configuration from, which will be parsed in order. Setting from
+files parsed later will override earlier settings.
 
 When run as just the server, the default settings are to listen on port 9200,
 drop privileges to nobody and log to the console. It will read no other
