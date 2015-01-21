@@ -116,7 +116,7 @@ class MonitoringServer(object):
     Only provides a run method, which can be called after the class is
     instantiated and will run the internal HTTPServer."""
 
-    def __init__(self, user=None, port=None, log_location=None, defaults=None):
+    def __init__(self, settings=None, defaults=None):
         """Creates the MonitoringServer.
 
         Sets up a number of internal variables, including the HTTPServer. Takes
@@ -125,15 +125,20 @@ class MonitoringServer(object):
         self._startup_messages = ['Server started.']
         self._error_messages = []
         self._logger = None
-        self._log_location = log_location
-        self._port = port
-        self._user = user
-        base_defaults = {'user': 'nobody',
-                         'port': 9200,
-                         'log_location': ''}
-        if defaults is not None:
-            base_defaults.update(defaults)
-        self._defaults = base_defaults
+        self._settings = {'user': None,
+                          'port': None,
+                          'log_location': None,
+                          'check_list': None,
+                          'return_list': None}
+        if settings:
+            self._settings.update(settings)
+        self._defaults = {'user': 'nobody',
+                          'port': 9200,
+                          'log_location': '',
+                          'check_list': ['/bin/true'],
+                          'return_list': [0]}
+        if defaults:
+            self._defaults.update(defaults)
 
     def run(self):
         """Sets up the environment and runs the internal HTTPServer."""
@@ -148,24 +153,28 @@ class MonitoringServer(object):
                 self._logger.critical(**message)
             return False
 
-        httpd = HTTPServer(('', self._port), MyHTTPRequestHandler)
+        httpd = HTTPServer(('', self._settings['port']), MyHTTPRequestHandler)
         httpd.serve_forever()
 
     def _set_defaults(self):
         """Set default values for variables that are still None."""
         for name, value in self._defaults.items():
-            if getattr(self, '_'+name) is None:
-                setattr(self, '_'+name, value)
+            try:
+                if self._settings[name] is None:
+                    self._settings[name] = value
+            except KeyError:
+                self._error_messages.append({'msg': 'Bad default Value',
+                                             'exc_info': sys.exc_info()})
 
     def _drop_privileges(self):
         """If running as root, will attempt to drop privileges to nobody."""
         if os.getuid() == 0:
             try:
-                newuser = pwd.getpwnam(self._user)
+                newuser = pwd.getpwnam(self._settings['user'])
             except KeyError:
                 self._error_messages.append({
                     'msg':
-                        'Could not drop privileges to {0}.'.format(self._user),
+                        'Could not drop privileges to {0}.'.format(self._settings['user']),
                     'exc_info': sys.exc_info()})
                 self._logger.exception('Error getting user')
             else:
@@ -174,7 +183,7 @@ class MonitoringServer(object):
                 os.setgid(newgid)
                 os.setuid(newuid)
                 self._startup_messages.append(
-                    'Privileges dropped from root to {0}.'.format(self._user))
+                    'Privileges dropped from root to {0}.'.format(self._settings['user']))
         else:
             self._startup_messages.append('Not root, privileges unchanged.')
 
@@ -186,16 +195,16 @@ class MonitoringServer(object):
         daemon facility."""
         self._logger = logging.getLogger('appsrvchk')
         self._logger.setLevel(logging.DEBUG)
-        if self._log_location == '':
+        if self._settings['log_location'] == '':
             handler = logging.StreamHandler()
         else:
             try:
                 handler = TimedRotatingFileHandler(
-                    self._log_location, when='midnight', backupCount=6)
+                    self._settings['log_location'], when='midnight', backupCount=6)
             except IOError:
                 handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
                 self._error_messages.append({
-                    'msg': 'Could not open logfile ' + self._log_location,
+                    'msg': 'Could not open logfile ' + self._settings['log_location'],
                     'exc_info': sys.exc_info()})
         formatter = logging.Formatter('%(levelname)s: %(message)s')
         handler.setFormatter(formatter)
@@ -225,9 +234,9 @@ class MonitoringServer(object):
                 else:
                     read_files.append(location)
             for key, value in config.items():
-                if getattr(self, '_'+key) is None:
-                    setattr(self, '_'+key, value)
-        except (AttributeError, ValueError):
+                if self._settings[key] is None:
+                    self._settings[key] = value
+        except (KeyError, ValueError):
             self._error_messages.append({'msg': 'Error parsing config',
                                          'exc_info': sys.exc_info()})
         else:
@@ -238,28 +247,25 @@ class MonitoringServer(object):
                 self._startup_messages.append(
                     'No config files read. Using defaults.')
 
-def run_server(user=None, port=None, log_location=None, config_location=None,
-               defaults=None):
+def run_server(settings=None, defaults=None):
     """The entry point for running a server. Does some process bookkeeping."""
     setproctitle('appsrvchk_server')
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    parameters = dict(vars())
-    parameters.update(parse_args())
+    if settings is None:
+        settings = {}
+    settings.update(parse_args())
+    config_location = settings.pop('config_location', None)
 
-    server = MonitoringServer(user=parameters['user'],
-                              port=parameters['port'],
-                              log_location=parameters['log_location'],
-                              defaults=parameters['defaults'])
-    server.read_configuration(config_location=parameters['config_location'])
+    server = MonitoringServer(settings, defaults)
+    server.read_configuration(config_location)
     if not server.run():
         # If something is wrong during configuration, don't spin the loop
         # too hard.
         time.sleep(5)
         sys.exit(1)
 
-def wrapper(user=None, port=None, log_location=None,
-            config_location='/etc/appsrvchk.cfg', defaults=None):
+def wrapper(settings=None, defaults=None):
     """A simple loop to make sure there's always a server running.
 
     Runs the server in a separate process and then sleeps. If the server ever
@@ -271,8 +277,11 @@ def wrapper(user=None, port=None, log_location=None,
     if defaults is None:
         defaults = {'log_location': '/var/log/appsrvchk/appsrvchk.log'}
 
-    parameters = dict(vars())
-    parameters.update(parse_args())
+    if settings is None:
+        settings = {}
+    settings.update(parse_args())
+    if not 'config_location' in settings:
+        settings['config_location'] = '/etc/appsrvchk.cfg'
 
     server = None
 
@@ -284,7 +293,7 @@ def wrapper(user=None, port=None, log_location=None,
     signal.signal(signal.SIGTERM, trap_TERM)
 
     while True:
-        server = Process(target=run_server, kwargs=parameters)
+        server = Process(target=run_server, args=(settings, defaults))
         server.start()
         server.join()
 
