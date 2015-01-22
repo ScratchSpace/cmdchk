@@ -1,6 +1,5 @@
 """A monitoring server that responds over HTTP.
 
-MyHTTPRequestHandler: A custom request handler for the stdlib HTTPServer.
 MonitoringServer: Configures and runs the HTTPServer.
 run_server: Runs the MonitoringServer.
 wrapper: Makes sure there's always a server running."""
@@ -16,7 +15,7 @@ from subprocess import CalledProcessError, Popen, PIPE, STDOUT
 
 from setproctitle import setproctitle
 
-class MyHTTPRequestHandler(BaseHTTPRequestHandler):
+class _MyHTTPRequestHandler(BaseHTTPRequestHandler):
     """A request handler that checks the status of some processes.
 
     This class subclasses BaseHTTPRequestHandler and provides do_HEAD, do_GET
@@ -24,12 +23,11 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
     __init__."""
 
     def __init__(self, *args, **kwargs):
-        """Create the MyHTTPRequestHandler.
+        """Create the _MyHTTPRequestHandler.
 
-        Simply sets the '_logger' and '_processes' instance variables.
-        Everything else is passed to the superclass. See
-        BaseHTTPRequestHandler.__init__ for details."""
-        self._logger = logging.getLogger('appsrvchk')
+        Simply sets the '_processes' instance variable. Everything else is
+        passed to the superclass. See BaseHTTPRequestHandler.__init__ for
+        details."""
         self._processes = False
         BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
@@ -38,21 +36,18 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
         Checks the status of programs and updates the '_processes' instance
         variable for later use. Is called by _send_my_headers as the first step
-        in creating a response.
-
-        NOTE: Can't go in our __init__. Before the superclass __init__,
-        self.log_message doesn't work, and after the superclass __init__ the
-        request has already been dispatched."""
+        in creating a response."""
         try:
-            for check in self.server.check_list:
-                proc = Popen(check[0], shell=True, stdout=PIPE, stderr=STDOUT)
+            for check, rets in self.server.check_list.items():
+                proc = Popen(check, shell=True, stdout=PIPE, stderr=STDOUT)
                 output, _ = proc.communicate()
                 ret = proc.returncode
-                if ret not in (check[1:] or [0]):
-                    raise CalledProcessError(ret, check[0], output)
+                if ret not in (rets or [0]):
+                    raise CalledProcessError(ret, check, output)
         except CalledProcessError as ex:
             self._processes = False
-            self.log_message("\n%s failed:\n%s", ex.cmd, ex.output,
+            self.log_message("\n%s failed: %s\n%s",
+                             ex.cmd, ex.returncode, ex.output,
                              lvl=logging.WARNING)
         else:
             self._processes = True
@@ -61,7 +56,8 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         """Handles the first part of sending a reponse.
 
         Calls _get_process_status first. If processing a HEAD request, this is
-        the only method that needs to be called."""
+        the only method that needs to be called. Is called by _send_my_response
+        as part of a full request."""
         self._get_process_status()
         if self._processes:
             self.send_response(200, 'OK')
@@ -79,8 +75,8 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
     def _send_my_response(self):
         """Handles sending the body of a response.
 
-        Calls _send_my_headers before sending the body. Call this for a GET
-        request."""
+        Calls _send_my_headers before sending the body. Called for a GET or
+        OPTIONS request."""
         self._send_my_headers()
         if self._processes:
             self.wfile.write("All checks succeeded.\r\n\r\n")
@@ -103,23 +99,27 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         """Overridden to send messages to the logger, instead of stderr."""
         # Python 3 has keyword only arguments, which lvl should use.
         lvl = kwargs.pop('lvl', logging.INFO)
-        self._logger.log(lvl, "%s - - [%s] %s",
-                         self.address_string(),
-                         self.log_date_time_string(),
-                         format_string%args)
+        self.server.logger.log(lvl, "%s - - [%s] %s",
+                               self.address_string(),
+                               self.log_date_time_string(),
+                               format_string%args)
 
 class MonitoringServer(object):
     """Holds a stdlib HTTPServer and the configuration for it.
 
-    Only provides a run method, which can be called after the class is
-    instantiated and will run the internal HTTPServer."""
+    Provides a read_configuration and a run method. When run is called, will
+    start the internal HTTPServer, so any calls to read_configuration should go
+    first."""
 
     def __init__(self, settings=None, defaults=None):
         """Creates the MonitoringServer.
 
-        Sets up a number of internal variables, including the HTTPServer. Takes
-        a filename as the log_location parameter to determine where logs should
-        go."""
+        Sets up a number of internal variables. Takes two similarly structured
+        dictionaries, one for settings and one for defaults. Values from the
+        settings hash are used. If a value in the settings hash is not
+        specified, it may come from a configuration file, and finally will be
+        supplied by the defaults hash. Values in the defaults hash override the
+        "default" defaults."""
         self._startup_messages = ['Server started.']
         self._error_messages = []
         self._logger = None
@@ -132,12 +132,15 @@ class MonitoringServer(object):
         self._defaults = {'user': 'nobody',
                           'port': 9200,
                           'log_location': '',
-                          'check_list': [['/bin/true']]}
+                          'check_list': {'/bin/true': []}}
         if defaults:
             self._defaults.update(defaults)
 
     def run(self):
-        """Sets up the environment and runs the internal HTTPServer."""
+        """Sets up the environment and runs the internal HTTPServer.
+
+        This function does NOT call read_configuration. That's up to the user
+        of the class."""
         self._set_defaults()
         self._drop_privileges()
         self._setup_logging()
@@ -149,8 +152,9 @@ class MonitoringServer(object):
                 self._logger.critical(**message)
             return False
 
-        httpd = HTTPServer(('', self._settings['port']), MyHTTPRequestHandler)
+        httpd = HTTPServer(('', self._settings['port']), _MyHTTPRequestHandler)
         httpd.check_list = self._settings['check_list']
+        httpd.logger = self._logger
         httpd.serve_forever()
 
     def _set_defaults(self):
@@ -164,7 +168,7 @@ class MonitoringServer(object):
                                              'exc_info': sys.exc_info()})
 
     def _drop_privileges(self):
-        """If running as root, will attempt to drop privileges to nobody."""
+        """If root, will attempt to drop privileges to the specified user."""
         if os.getuid() == 0:
             try:
                 newuser = pwd.getpwnam(self._settings['user'])
@@ -211,12 +215,12 @@ class MonitoringServer(object):
         self._logger.addHandler(handler)
 
     def read_configuration(self, config_location=None):
-        """Reads in the previously specified configurations.
+        """Reads in the specified configurations.
 
-        Attempts to read in the configuration files specified during object
-        construction. Bails out on errors in any of them. Sets values on the
-        instance. Does not try to set values that already exist via other
-        methods of configuration."""
+        Attempts to read in the given JSON formatted configuration files. Takes
+        a single filename or a list of filenames. Bails out on errors in any of
+        them. Sets values on the instance. Does not try to set values that
+        already exist via other methods of configuration."""
         if config_location is None:
             config_location = []
         config = {}
@@ -248,7 +252,11 @@ class MonitoringServer(object):
                     'No config files read. Using defaults.')
 
 def run_server(settings=None, defaults=None):
-    """The entry point for running a server. Does some process bookkeeping."""
+    """The entry point for running a server.
+
+    The Settings parameter matches the MonitoringServer settings parameter, but
+    may also include a config_location key, which will be passed on to
+    read_configuration. It is updated by the args, if applicable."""
     setproctitle('appsrvchk_server')
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
@@ -270,8 +278,8 @@ def wrapper(settings=None, defaults=None):
 
     Runs the server in a separate process and then sleeps. If the server ever
     dies, the wrapper wakes up and starts a new one. On SIGTERM, kills the
-    currently running server and exits. Parses exactly one command line
-    argument, which is passed on as the log_location."""
+    currently running server and exits. Parameters are the same as
+    run_server, and will be update by provided args, if applicable."""
     setproctitle('appsrvchk_wrapper')
 
     if defaults is None:
@@ -298,7 +306,7 @@ def wrapper(settings=None, defaults=None):
         server.join()
 
 def parse_args():
-    """some common argument parsing."""
+    """some common argument parsing for run_server and wrapper."""
     parser = ArgumentParser()
     parser.add_argument('--user', '-u', help='The user to run the server as.')
     parser.add_argument('--port', '-p', type=int,
@@ -316,13 +324,16 @@ def parse_args():
     return dict((k, v) for k, v in args.items() if v is not None)
 
 class _AppendChecks(Action):
-    """An argparse Action to convert args after the first to ints."""
+    """An argparse Action to handle the checkk_list.
+
+    Stores the return values as a list of ints in the dest dictionary, keyed by
+    the check string."""
     def __call__(self, parser, namespace, values, option_string=None):
-        check = values[0:1]
+        check = values[0]
+        rets = []
         for value in values[1:]:
-            check.append(int(value))
+            rets.append(int(value))
         if getattr(namespace, self.dest, None) is None:
-            setattr(namespace, self.dest, [])
+            setattr(namespace, self.dest, {})
         check_list = getattr(namespace, self.dest)
-        check_list.append(check)
-        setattr(namespace, self.dest, check_list)
+        check_list[check] = rets
