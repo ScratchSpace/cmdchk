@@ -5,9 +5,10 @@ MonitoringServer: Configures and runs the HTTPServer.
 run_server: Runs the MonitoringServer.
 wrapper: Makes sure there's always a server running."""
 from __future__ import print_function, unicode_literals
+
 import json, logging, os, pwd, signal, sys, time
 
-from argparse import ArgumentParser
+from argparse import Action, ArgumentParser
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
@@ -43,13 +44,12 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
         self.log_message doesn't work, and after the superclass __init__ the
         request has already been dispatched."""
         try:
-            checks = zip(self.server.check_list, self.server.return_list)
-            for check, good_ret in checks:
-                proc = Popen(check, shell=True, stdout=PIPE, stderr=STDOUT)
+            for check in self.server.check_list:
+                proc = Popen(check[0], shell=True, stdout=PIPE, stderr=STDOUT)
                 output, _ = proc.communicate()
                 ret = proc.returncode
-                if ret != good_ret:
-                    raise CalledProcessError(ret, check, output)
+                if ret not in (check[1:] or [0]):
+                    raise CalledProcessError(ret, check[0], output)
         except CalledProcessError as ex:
             self._processes = False
             self.log_message("\n%s failed:\n%s", ex.cmd, ex.output,
@@ -126,15 +126,13 @@ class MonitoringServer(object):
         self._settings = {'user': None,
                           'port': None,
                           'log_location': None,
-                          'check_list': None,
-                          'return_list': None}
+                          'check_list': None}
         if settings:
             self._settings.update(settings)
         self._defaults = {'user': 'nobody',
                           'port': 9200,
                           'log_location': '',
-                          'check_list': ['/bin/true'],
-                          'return_list': [0]}
+                          'check_list': [['/bin/true']]}
         if defaults:
             self._defaults.update(defaults)
 
@@ -153,7 +151,6 @@ class MonitoringServer(object):
 
         httpd = HTTPServer(('', self._settings['port']), MyHTTPRequestHandler)
         httpd.check_list = self._settings['check_list']
-        httpd.return_list = self._settings['return_list']
         httpd.serve_forever()
 
     def _set_defaults(self):
@@ -173,8 +170,8 @@ class MonitoringServer(object):
                 newuser = pwd.getpwnam(self._settings['user'])
             except KeyError:
                 self._error_messages.append({
-                    'msg':
-                        'Could not drop privileges to {0}.'.format(self._settings['user']),
+                    'msg': 'Could not drop privileges to {0}.'.format(
+                        self._settings['user']),
                     'exc_info': sys.exc_info()})
                 self._logger.exception('Error getting user')
             else:
@@ -183,7 +180,8 @@ class MonitoringServer(object):
                 os.setgid(newgid)
                 os.setuid(newuid)
                 self._startup_messages.append(
-                    'Privileges dropped from root to {0}.'.format(self._settings['user']))
+                    'Privileges dropped from root to {0}.'.format(
+                        self._settings['user']))
         else:
             self._startup_messages.append('Not root, privileges unchanged.')
 
@@ -200,11 +198,13 @@ class MonitoringServer(object):
         else:
             try:
                 handler = TimedRotatingFileHandler(
-                    self._settings['log_location'], when='midnight', backupCount=6)
+                    self._settings['log_location'], when='midnight',
+                    backupCount=6)
             except IOError:
                 handler = SysLogHandler(facility=SysLogHandler.LOG_DAEMON)
                 self._error_messages.append({
-                    'msg': 'Could not open logfile ' + self._settings['log_location'],
+                    'msg': 'Could not open logfile {1}'.format(
+                        self._settings['log_location']),
                     'exc_info': sys.exc_info()})
         formatter = logging.Formatter('%(levelname)s: %(message)s')
         handler.setFormatter(formatter)
@@ -307,16 +307,22 @@ def parse_args():
                         help='The file the server should log to.')
     parser.add_argument('--config', '-c', nargs='*', dest='config_location',
                         help='A list of config files to read from.')
-    parser.add_argument('--checks', '-k', nargs='*', dest='check_list',
-                        help='A list of commands to run.')
-    parser.add_argument('--returns', '-r', nargs='*', dest='return_list',
-                        type=int,
-                        help='A list of return codes to match the checks.')
+    parser.add_argument('--check', '-k', action=_AppendChecks, nargs='*',
+                        dest='check_list', metavar=('CHECK', 'RETURN'),
+                        help=('A check to run followed by possible return ' +
+                              "values.\nEg: -k /bin/somecommand 0 5"))
 
     args = vars(parser.parse_args())
-    if len(args['check_list'] or []) != len(args['return_list'] or []):
-        print('Unequal number of checks and return codes', file=sys.stderr)
-        parser.print_help()
-        sys.exit()
-
     return dict((k, v) for k, v in args.items() if v is not None)
+
+class _AppendChecks(Action):
+    """An argparse Action to convert args after the first to ints."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        check = values[0:1]
+        for value in values[1:]:
+            check.append(int(value))
+        if getattr(namespace, self.dest, None) is None:
+            setattr(namespace, self.dest, [])
+        check_list = getattr(namespace, self.dest)
+        check_list.append(check)
+        setattr(namespace, self.dest, check_list)

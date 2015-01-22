@@ -40,10 +40,14 @@ the constructor programatically, or specified in the configuration file (you
 cannot specify the configuration files in the configuration file).
 
 The configuration files are JSON formatted object, and may contain the keys
-"user" (a string), "port" (an int), "log_location" (a string), "check_list" (a
-list of strings) and "return_list" (a list of ints). You may specify multiple
-files to pull configuration from, which will be parsed in order. Setting from
-files parsed later will override earlier settings.
+"user" (a string), "port" (an int), "log_location" (a string) and "check_list"
+(a list of lists of one string followed by zero or more ints). You may specify
+multiple files to pull configuration from, which will be parsed in order.
+Setting from files parsed later will override earlier settings.
+
+The check_list option should be specified as an array with the check to run
+first optionally followed by any valid return codes. If no return codes are
+specified, 0 will be assumed.
 
 When run as just the server, the default settings are to listen on port 9200,
 drop privileges to nobody and log to the console. It will read no other
