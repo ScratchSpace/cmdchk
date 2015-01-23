@@ -8,12 +8,20 @@ from __future__ import print_function, unicode_literals
 import json, logging, os, pwd, signal, sys, time
 
 from argparse import Action, ArgumentParser
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+try:
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+except ImportError:
+    from http.server import HTTPServer, BaseHTTPRequestHandler
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
 from subprocess import CalledProcessError, Popen, PIPE, STDOUT
 
 from setproctitle import setproctitle
+
+if sys.version_info[0] == 2:
+    string_types = basestring
+else:
+    string_types = str
 
 class _MyHTTPRequestHandler(BaseHTTPRequestHandler):
     """A request handler that checks the status of some processes.
@@ -79,9 +87,11 @@ class _MyHTTPRequestHandler(BaseHTTPRequestHandler):
         OPTIONS request."""
         self._send_my_headers()
         if self._processes:
-            self.wfile.write("All checks succeeded.\r\n\r\n")
+            self.wfile.write("All checks succeeded.\r\n\r\n".encode(
+                'utf_8', 'replace'))
         else:
-            self.wfile.write("Check failed, please see log.\r\n\r\n")
+            self.wfile.write("Check failed, please see log.\r\n\r\n".encode(
+                'utf_8', 'replace'))
 
     def do_HEAD(self):
         """Required by the superclass. Handles HEAD requests."""
@@ -225,7 +235,7 @@ class MonitoringServer(object):
             config_location = []
         config = {}
         read_files = []
-        if isinstance(config_location, basestring):
+        if isinstance(config_location, string_types):
             config_location = [config_location]
         try:
             for location in config_location:
