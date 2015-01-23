@@ -8,36 +8,22 @@ from __future__ import print_function, unicode_literals
 import json, logging, os, pwd, signal, sys, time
 
 from argparse import Action, ArgumentParser
-try:
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-except ImportError:
-    from http.server import HTTPServer, BaseHTTPRequestHandler
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
 from multiprocessing import Process
 from subprocess import CalledProcessError, Popen, PIPE, STDOUT
 
-from setproctitle import setproctitle
+try:
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+except ImportError:
+    from http.server import HTTPServer, BaseHTTPRequestHandler
 
-if sys.version_info[0] == 2:
-    string_types = basestring
-else:
-    string_types = str
+from setproctitle import setproctitle
 
 class _MyHTTPRequestHandler(BaseHTTPRequestHandler):
     """A request handler that checks the status of some processes.
 
     This class subclasses BaseHTTPRequestHandler and provides do_HEAD, do_GET
-    and do_OPTIONS methods. It overrides log_message method and extends
-    __init__."""
-
-    def __init__(self, *args, **kwargs):
-        """Create the _MyHTTPRequestHandler.
-
-        Simply sets the '_processes' instance variable. Everything else is
-        passed to the superclass. See BaseHTTPRequestHandler.__init__ for
-        details."""
-        self._processes = False
-        BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+    and do_OPTIONS methods. It overrides the log_message method."""
 
     def _get_process_status(self):
         """The test to determine if the monitored processes are running.
@@ -235,7 +221,7 @@ class MonitoringServer(object):
             config_location = []
         config = {}
         read_files = []
-        if isinstance(config_location, string_types):
+        if not isinstance(config_location, list):
             config_location = [config_location]
         try:
             for location in config_location:
