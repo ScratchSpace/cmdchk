@@ -313,18 +313,18 @@ def parse_args():
                         help='The port which the server should bind to.')
     parser.add_argument('--log', '-l', dest='log_location',
                         help='The file the server should log to.')
-    parser.add_argument('--config', '-c', nargs='*', dest='config_location',
+    parser.add_argument('--config', '-c', nargs='+', dest='config_location',
                         help='A list of config files to read from.')
-    parser.add_argument('--check', '-k', action=_AppendChecks, nargs='*',
+    parser.add_argument('--check', '-k', action=_AppendChecks, nargs='+',
                         dest='check_list', metavar=('CHECK', 'RETURN'),
-                        help=('A check to run followed by possible return ' +
-                              "values.\nEg: -k /bin/somecommand 0 5"))
+                        help='A check to run followed by possible return ' +
+                        'values. Eg: -k /bin/somecommand 0 5 -k /bin/other')
 
     args = vars(parser.parse_args())
     return dict((k, v) for k, v in args.items() if v is not None)
 
 class _AppendChecks(Action):
-    """An argparse Action to handle the checkk_list.
+    """An argparse Action to handle the check_list.
 
     Stores the return values as a list of ints in the dest dictionary, keyed by
     the check string."""
