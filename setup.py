@@ -36,8 +36,8 @@ setup(
     platforms=['GNU/Linux'],
     entry_points={
         'console_scripts': [
-            'cmdchk_wrapper = cmdchk.cmdchk_server:wrapper',
-            'cmdchk_server = cmdchk.cmdchk_server:run_server',
+            'cmdchk_wrapper = cmdchk:wrapper',
+            'cmdchk_server = cmdchk:run_server',
         ]
     },
 )
