@@ -1,4 +1,4 @@
-Appsrvchk
+Cmdchk
 =========
 
 Summary
@@ -65,4 +65,5 @@ information.
 Compatability
 -------------
 
-Requires python 2.6 or 2.7, and the setproctitle package from pypi.
+Requires python >= 2.6 and the setproctitle package from pypi. On python 2.6,
+also requires argparse from pypy.

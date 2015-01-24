@@ -191,7 +191,7 @@ class MonitoringServer(object):
         Logs to the console by default. If a log_location was specified, will
         attempt to log there. If the fails, will log the error to syslog's
         daemon facility."""
-        self._logger = logging.getLogger('appsrvchk')
+        self._logger = logging.getLogger('cmdchk')
         self._logger.setLevel(logging.DEBUG)
         if self._settings['log_location'] == '':
             handler = logging.StreamHandler()
@@ -253,7 +253,7 @@ def run_server(settings=None, defaults=None):
     The Settings parameter matches the MonitoringServer settings parameter, but
     may also include a config_location key, which will be passed on to
     read_configuration. It is updated by the args, if applicable."""
-    setproctitle('appsrvchk_server')
+    setproctitle('cmdchk_server')
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
     if settings is None:
@@ -276,16 +276,16 @@ def wrapper(settings=None, defaults=None):
     dies, the wrapper wakes up and starts a new one. On SIGTERM, kills the
     currently running server and exits. Parameters are the same as
     run_server, and will be update by provided args, if applicable."""
-    setproctitle('appsrvchk_wrapper')
+    setproctitle('cmdchk_wrapper')
 
     if defaults is None:
-        defaults = {'log_location': '/var/log/appsrvchk/appsrvchk.log'}
+        defaults = {'log_location': '/var/log/cmdchk/cmdchk.log'}
 
     if settings is None:
         settings = {}
     settings.update(parse_args())
     if not 'config_location' in settings:
-        settings['config_location'] = '/etc/appsrvchk.cfg'
+        settings['config_location'] = '/etc/cmdchk.cfg'
 
     server = None
 
