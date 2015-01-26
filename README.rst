@@ -34,24 +34,25 @@ it started and then exit.
 Configuration
 -------------
 
-You can set the server's user, port, log file and configuration files. These can
-be set (highest to lowest priority) using arguments (try '--help'), passed to
-the constructor programatically, or specified in the configuration file (you
-cannot specify the configuration files in the configuration file).
+You can set the server's user, port, log file, configuration files and checks
+to run. These can be set (highest to lowest priority) using arguments (try
+'--help'), passed to the constructor programatically, or specified in the
+configuration file (you cannot specify the configuration files in the
+configuration file).
 
 The configuration files are JSON formatted object, and may contain the keys
 "user" (a string), "port" (an int), "log_location" (a string) and "check_list"
-(a list of lists of one string followed by zero or more ints). You may specify
+(a dictionary of string mapped to a list of zero or more ints). You may specify
 multiple files to pull configuration from, which will be parsed in order.
-Setting from files parsed later will override earlier settings.
+Settings from files parsed later will override earlier settings.
 
-The check_list option should be specified as an array with the check to run
-first optionally followed by any valid return codes. If no return codes are
-specified, 0 will be assumed.
+The check_list option should be specified as a dictionary with the check to run
+as the key mapped to a list containing any valid return codes. If the list is
+empty, 0 will be assumed to be the only correct return code.
 
 When run as just the server, the default settings are to listen on port 9200,
-drop privileges to nobody and log to the console. It will read no other
-configuration files unless told to.
+drop privileges to nobody, log to the console and run /bin/true. It will read
+no configuration files unless told to.
 
 When run as the wrapper, it will log to /var/log/appsrvchk/appsrvchk.log and
 read /etc/appsrvchk.cfg, otherwise acting as above.

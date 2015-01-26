@@ -1,3 +1,7 @@
+"""A configurable system monitor.
+
+run_server: Configures and runs the MonitoringServer.
+wrapper: Calls run_server in a loop, in case it crashes."""
 from __future__ import print_function, absolute_import, unicode_literals
 
 import signal, sys, time
