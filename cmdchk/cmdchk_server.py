@@ -6,7 +6,7 @@ from __future__ import print_function, absolute_import, unicode_literals
 import json, logging, os, pwd, sys
 
 from logging.handlers import SysLogHandler, TimedRotatingFileHandler
-from subprocess import CalledProcessError, Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT
 
 try:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
@@ -95,6 +95,17 @@ class _MyHTTPRequestHandler(BaseHTTPRequestHandler):
                                self.address_string(),
                                self.log_date_time_string(),
                                format_string%args)
+
+class CalledProcessError(Exception):
+    """Backport of the exception from >2.7, for 2.6."""
+
+    def __init__(self, returncode, cmd, output=None):
+        self.returncode = returncode
+        self.cmd = cmd
+        self.output = output
+
+    def __str__(self):
+        return "Command '%s' returned non-zero exit status %d" % (self.cmd, self.returncode)
 
 class MonitoringServer(object):
     """Holds a stdlib HTTPServer and the configuration for it.
