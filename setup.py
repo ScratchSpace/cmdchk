@@ -14,7 +14,7 @@ if sys.version_info[0] == 2 and sys.version_info[1] == 6:
 version_py = os.path.join(os.path.dirname(__file__), 'cmdchk', 'version.py')
 
 try:
-    version_git = subprocess.check_output(['/usr/bin/git', 'describe']).rstrip().replace('v', '')
+    version_git = subprocess.check_output(['/usr/bin/git', 'describe']).rstrip()[1:]
 except (OSError, subprocess.CalledProcessError):
     with open(version_py) as f:
         version_git = f.read().strip().split(' = ')[-1].replace("'", '')
