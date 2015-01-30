@@ -84,7 +84,8 @@ def _parse_args():
                         dest='check_list', metavar=('CHECK', 'RETURN'),
                         help='A check to run followed by possible return ' +
                         'values. Eg: -k /bin/somecommand 0 5 -k /bin/other')
-    parser.add_argument('--version', '-V', action='version', version=__version__)
+    parser.add_argument('--version', '-V',
+                        action='version', version=__version__)
 
     args = vars(parser.parse_args())
     return dict((k, v) for k, v in args.items() if v is not None)
