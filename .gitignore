@@ -1,0 +1,5 @@
+/build/
+/cmdchk.egg-info/
+/dist/
+/cmdchk/version.py
+*.pyc
