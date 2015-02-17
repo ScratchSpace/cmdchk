@@ -180,7 +180,6 @@ class MonitoringServer(object):
                     'msg': 'Could not drop privileges to {0}.'.format(
                         self._settings['user']),
                     'exc_info': sys.exc_info()})
-                self._logger.exception('Error getting user')
             else:
                 newuid, newgid = newuser[2:4]
                 os.setgroups([])
