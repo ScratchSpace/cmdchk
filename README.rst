@@ -21,7 +21,7 @@ privileges to a specified user. Any errors during startup will cause it to sleep
 for 5 seconds and exit instead of serving.
 
 It has the capability to parse config files to set the user it runs as, the
-port it listens on and the logfile it writes to.
+port it listens on, the logfile it writes to and the checks it runs.
 
 Wrapper
 -------
@@ -54,8 +54,22 @@ When run as just the server, the default settings are to listen on port 9200,
 drop privileges to nobody, log to the console and run /bin/true. It will read
 no configuration files unless told to.
 
-When run as the wrapper, it will log to /var/log/appsrvchk/appsrvchk.log and
-read /etc/appsrvchk.cfg, otherwise acting as above.
+When run as the wrapper, it will log to /var/log/cmdchk/cmdchk.log and
+read /etc/cmdchk.cfg, otherwise acting as above.
+
+Building
+--------
+
+A version file is generated dynamically from :code:`git describe` when building.
+If you've cloned the repository, you can probably interact with setup.py as you
+normally would. If you're building a package and want a tarball of some type,
+I suggest running :code:`python setup.py sdist`, then using the setup.py in the
+generated tarball to drive the package build.
+
+To create a release, please run
+:code:`git tag -a vMaj.Min.Bug -m "Maj.Min.Bug ready for building.`
+before running setup.py. See `Semver <http://semver.org/>` for details of the
+versioning scheme.
 
 License
 -------
